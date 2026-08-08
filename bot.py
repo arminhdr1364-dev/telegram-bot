@@ -533,12 +533,21 @@ async def search(
 
         search_users.discard(user_id)
 
-        await update.message.reply_text(
-            "🎁 بخش Gift را از نسخه فعلی رباتت استفاده کن."
+        loading = await update.message.reply_text(
+            "⏳ در حال دریافت Giftهای Telegram..."
         )
 
-        return
+        await show_gifts(
+            update,
+            context
+        )
 
+        try:
+            await loading.delete()
+        except Exception:
+            pass
+
+        return
 
     # ==================================================
     # راهنما
