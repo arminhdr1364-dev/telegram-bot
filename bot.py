@@ -110,6 +110,7 @@ async def show_gifts(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
 
+        # دریافت Giftها از Telegram
         result = await context.bot.get_available_gifts()
 
         print("========== GIFTS ==========")
@@ -119,16 +120,28 @@ async def show_gifts(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not result.gifts:
 
             await update.message.reply_text(
-                "❌ Telegram هیچ Giftای برنگرداند."
+                "❌ در حال حاضر Giftای موجود نیست."
             )
 
             return
 
+        # تعداد Giftها
         await update.message.reply_text(
-            f"🎁 تعداد Giftهای دریافت‌شده: {len(result.gifts)}"
+            f"🎁 <b>Telegram Gifts</b>\n\n"
+            f"📦 تعداد Giftها: <b>{len(result.gifts)}</b>\n"
+            f"⭐ قیمت‌ها بر اساس Telegram Stars",
+            parse_mode="HTML"
         )
 
-        for index, gift in enumerate(result.gifts, start=1):
+        # نمایش Giftها
+        for index, gift in enumerate(
+            result.gifts,
+            start=1
+        ):
+
+            # --------------------------
+            # اطلاعات Gift
+            # --------------------------
 
             text = (
                 f"🎁 <b>Gift #{index}</b>\n\n"
@@ -136,20 +149,119 @@ async def show_gifts(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"⭐ قیمت: <b>{gift.star_count} Stars</b>"
             )
 
+            # --------------------------
+            # اطلاعات تعداد
+            # --------------------------
+
+            total_count = getattr(
+                gift,
+                "total_count",
+                None
+            )
+
+            remaining_count = getattr(
+                gift,
+                "remaining_count",
+                None
+            )
+
+            if total_count is not None:
+
+                text += (
+                    f"\n📊 تعداد کل: "
+                    f"<b>{total_count}</b>"
+                )
+
+            if remaining_count is not None:
+
+                text += (
+                    f"\n📦 باقی‌مانده: "
+                    f"<b>{remaining_count}</b>"
+                )
+
+            # --------------------------
+            # دکمه Portals
+            # --------------------------
+
+            keyboard = InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton(
+                        "🛒 مشاهده / خرید در Portals",
+                        url="https://t.me/portals"
+                    )
+                ]
+            ])
+
+            # --------------------------
+            # ارسال اطلاعات
+            # --------------------------
+
             await update.message.reply_text(
                 text,
-                parse_mode="HTML"
+                parse_mode="HTML",
+                reply_markup=keyboard
             )
+
+            # --------------------------
+            # ارسال استیکر Gift
+            # --------------------------
+
+            try:
+
+                sticker = gift.sticker
+
+                if sticker:
+
+                    await update.message.reply_sticker(
+                        sticker=sticker.file_id
+                    )
+
+                    print(
+                        f"✅ Sticker sent: {gift.id}"
+                    )
+
+                else:
+
+                    print(
+                        f"⚠️ No sticker: {gift.id}"
+                    )
+
+            except Exception as error:
+
+                print(
+                    f"❌ Sticker error "
+                    f"{gift.id}: {repr(error)}"
+                )
+
+        # --------------------------
+        # پایان
+        # --------------------------
+
+        await update.message.reply_text(
+            "✅ نمایش تمام Giftها تمام شد.",
+            reply_markup=main_keyboard()
+        )
 
     except Exception as error:
 
-        print("========== GIFTS ERROR ==========")
-        print(repr(error))
-        print("=================================")
+        print(
+            "========== GIFTS ERROR =========="
+        )
+
+        print(
+            repr(error)
+        )
+
+        print(
+            "================================="
+        )
 
         await update.message.reply_text(
-            "❌ دریافت Gift با خطا مواجه شد."
+            "❌ خطا در دریافت Giftهای Telegram.\n\n"
+            "لطفاً Logs ربات را بررسی کنید.",
+            reply_markup=main_keyboard()
         )
+
 
 # ==================================================
 # منوی بازار
