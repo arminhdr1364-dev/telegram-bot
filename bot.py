@@ -1,8 +1,7 @@
-from telegram import Update
+from telegram import Update, Bot
 from telegram.ext import (
     Application,
     CommandHandler,
-    CallbackQueryHandler,
     MessageHandler,
     ContextTypes,
     filters,
@@ -11,37 +10,58 @@ from telegram.ext import (
 from config import TOKEN
 from keyboards import main_keyboard, coins_keyboard
 from binance_api import get_price
+
+
+# =========================
+# تنظیمات
+# =========================
+
 search_users = set()
+
+
+# =========================
+# شروع ربات
+# =========================
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "👋 به ربات قیمت ارزهای دیجیتال خوش آمدید.",
         reply_markup=main_keyboard()
     )
-async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
 
-    if query.data == "search":
-        search_users.add(query.from_user.id)
 
-        await query.message.reply_text(
-            "🔍 نام ارز را وارد کنید.\n\nمثال:\nBTCUSDT\nETHUSDT\nTONUSDT"
-        )
+# =========================
+# دریافت گیفت‌های تلگرام
+# =========================
 
-    elif query.data == "help":
-        await query.message.reply_text(
-            "نام هر ارز را به صورت BTCUSDT یا ETHUSDT ارسال کنید."
-        )
+async def get_telegram_gifts():
+    try:
+        bot = Bot(TOKEN)
 
-    elif query.data == "gift":
-        await query.message.reply_text(
-            "🚧 بخش قیمت گیفت تلگرام به‌زودی اضافه می‌شود."
-        )
+        gifts = await bot.get_available_gifts()
 
-    elif query.data == "admin":
-        await query.message.reply_text(
-            "🚧 پنل مدیریت در نسخه بعدی اضافه می‌شود."
-        )
+        if not gifts.gifts:
+            return "❌ در حال حاضر گیفتی در دسترس نیست."
+
+        text = "🎁 قیمت گیفت‌های تلگرام\n\n"
+
+        for gift in gifts.gifts:
+            text += (
+                f"🎁 Gift ID: {gift.id}\n"
+                f"⭐ قیمت: {gift.star_count} Stars\n\n"
+            )
+
+        return text
+
+    except Exception as e:
+        print("Gift Error:", e)
+        return "❌ خطا در دریافت گیفت‌های تلگرام."
+
+
+# =========================
+# ارزهای محبوب
+# =========================
+
 coins = {
     "🟠 BTC": "BTCUSDT",
     "🔵 ETH": "ETHUSDT",
@@ -53,90 +73,188 @@ coins = {
     "🔴 TRX": "TRXUSDT",
 }
 
+
+# =========================
+# نمایش قیمت ارز
+# =========================
+
+async def send_coin_price(update: Update, symbol: str):
+
+    data = get_price(symbol)
+
+    if data is None:
+        await update.message.reply_text(
+            "❌ دریافت اطلاعات این ارز ممکن نیست."
+        )
+        return
+
+    try:
+        change = float(data["change"]) * 100
+
+        message = (
+            f"💰 {data['symbol']}\n\n"
+            f"💵 قیمت: {float(data['price']):,.6f} USDT\n\n"
+            f"📈 تغییرات: {change:.2f}%\n\n"
+            f"⬆️ بیشترین: {data['high']}\n\n"
+            f"⬇️ کمترین: {data['low']}\n\n"
+            f"📊 حجم معاملات: {data['volume']}"
+        )
+
+        await update.message.reply_text(
+            message,
+            reply_markup=coins_keyboard()
+        )
+
+    except Exception as e:
+        print("Price Error:", e)
+
+        await update.message.reply_text(
+            "❌ خطا در نمایش اطلاعات ارز."
+        )
+
+
+# =========================
+# جستجوی ارز و دکمه‌ها
+# =========================
+
 async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-    text = update.message.text.strip()
+    if update.message is None:
+        return
 
+    text = update.message.text.strip()
+    user_id = update.effective_user.id
+
+    # =========================
     # بازگشت
+    # =========================
+
     if text == "🔙 بازگشت":
-        search_users.discard(update.effective_user.id)
+
+        search_users.discard(user_id)
 
         await update.message.reply_text(
             "🏠 به منوی اصلی برگشتید.",
             reply_markup=main_keyboard()
         )
+
         return
 
+    # =========================
     # ارزهای محبوب
+    # =========================
+
     if text == "⭐ ارزهای محبوب":
+
+        search_users.discard(user_id)
+
         await update.message.reply_text(
             "⭐ یک ارز را انتخاب کنید:",
             reply_markup=coins_keyboard()
         )
+
         return
 
-    # انتخاب ارزهای محبوب
+    # =========================
+    # انتخاب ارز محبوب
+    # =========================
+
     if text in coins:
 
-        data = get_price(coins[text])
-
-        if data is None:
-            await update.message.reply_text("❌ دریافت اطلاعات ممکن نیست.")
-            return
-
-        change = float(data["change"]) * 100
-
-        await update.message.reply_text(
-            f"""💰 {data['symbol']}
-
-💵 قیمت: {float(data['price']):,.6f} USDT
-
-📈 تغییرات: {change:.2f} %
-
-⬆️ بیشترین: {data['high']}
-
-⬇️ کمترین: {data['low']}
-
-📊 حجم معاملات: {data['volume']}""",
-            reply_markup=coins_keyboard()
+        await send_coin_price(
+            update,
+            coins[text]
         )
+
         return
 
-    # جستجوی دستی
+    # =========================
+    # قیمت رمز ارز
+    # =========================
+
     if text == "💰 قیمت رمز ارز":
-        search_users.add(update.effective_user.id)
+
+        search_users.add(user_id)
 
         await update.message.reply_text(
-            "🔍 نماد ارز را وارد کنید.\n\nمثال:\nBTC\nETH\nTON"
+            "🔍 نماد ارز را وارد کنید.\n\n"
+            "مثال:\n"
+            "BTC\n"
+            "ETH\n"
+            "TON\n\n"
+            "یا:\n"
+            "BTCUSDT"
         )
+
         return
 
+    # =========================
     # راهنما
+    # =========================
+
     if text == "ℹ️ راهنما":
         await update.message.reply_text(
-            "برای مشاهده قیمت، روی «💰 قیمت رمز ارز» بزنید."
+            "ℹ️ راهنمای ربات\n\n"
+            "💰 قیمت رمز ارز\n"
+            "برای دریافت قیمت یک ارز، روی این گزینه بزنید "
+            "و نماد ارز را ارسال کنید.\n\n"
+            "⭐ ارزهای محبوب\n"
+            "قیمت ارزهای محبوب را مشاهده کنید.\n\n"
+            "🎁 قیمت گیفت تلگرام\n"
+            "قیمت Giftها را بر اساس Telegram Stars مشاهده کنید."
         )
+
         return
 
-    # گیفت
+    # =========================
+    # گیفت تلگرام
+    # =========================
+
     if text == "🎁 قیمت گیفت تلگرام":
+
+        search_users.discard(user_id)
+
         await update.message.reply_text(
-            "🚧 این بخش به زودی اضافه می‌شود."
+            "⏳ در حال دریافت قیمت گیفت‌ها از Telegram..."
         )
+
+        gifts_text = await get_telegram_gifts()
+
+        await update.message.reply_text(
+            gifts_text,
+            parse_mode="Markdown",
+            reply_markup=main_keyboard()
+        )
+
         return
 
+    # =========================
     # پنل مدیریت
+    # =========================
+
     if text == "👤 پنل مدیریت":
+
+        search_users.discard(user_id)
+
         await update.message.reply_text(
-            "🚧 این بخش در نسخه بعدی اضافه می‌شود."
+            "🚧 پنل مدیریت در نسخه بعدی اضافه می‌شود.",
+            reply_markup=main_keyboard()
         )
+
         return
 
-    # اگر در حالت جستجو نیست
-    if update.effective_user.id not in search_users:
+    # =========================
+    # اگر کاربر در حالت جستجو نیست
+    # =========================
+
+    if user_id not in search_users:
         return
 
-    symbol = text.upper()
+    # =========================
+    # جستجوی دستی
+    # =========================
+
+    symbol = text.upper().replace(" ", "")
 
     if not symbol.endswith("USDT"):
         symbol += "USDT"
@@ -144,36 +262,74 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = get_price(symbol)
 
     if data is None:
-        await update.message.reply_text("❌ ارز پیدا نشد.")
-        search_users.discard(update.effective_user.id)
+
+        await update.message.reply_text(
+            "❌ ارز پیدا نشد.\n\n"
+            "مثلاً BTC یا ETH را امتحان کنید."
+        )
+
+        search_users.discard(user_id)
+
         return
 
-    change = float(data["change"]) * 100
+    try:
 
-    await update.message.reply_text(
-        f"""💰 {data['symbol']}
+        change = float(data["change"]) * 100
 
-💵 قیمت: {float(data['price']):,.6f} USDT
+        message = (
+            f"💰 {data['symbol']}\n\n"
+            f"💵 قیمت: {float(data['price']):,.6f} USDT\n\n"
+            f"📈 تغییرات: {change:.2f}%\n\n"
+            f"⬆️ بیشترین: {data['high']}\n\n"
+            f"⬇️ کمترین: {data['low']}\n\n"
+            f"📊 حجم معاملات: {data['volume']}"
+        )
 
-📈 تغییرات: {change:.2f} %
+        await update.message.reply_text(
+            message,
+            reply_markup=main_keyboard()
+        )
 
-⬆️ بیشترین: {data['high']}
+    except Exception as e:
 
-⬇️ کمترین: {data['low']}
+        print("Search Price Error:", e)
 
-📊 حجم معاملات: {data['volume']}""",
-        reply_markup=main_keyboard()
+        await update.message.reply_text(
+            "❌ خطا در نمایش اطلاعات ارز."
+        )
+
+    search_users.discard(user_id)
+
+
+# =========================
+# اجرای ربات
+# =========================
+
+def main():
+
+    app = Application.builder().token(TOKEN).build()
+
+    # دستور /start
+    app.add_handler(
+        CommandHandler("start", start)
     )
 
-    search_users.discard(update.effective_user.id)
+    # پیام‌های متنی
+    app.add_handler(
+        MessageHandler(
+            filters.TEXT & ~filters.COMMAND,
+            search
+        )
+    )
+
+    print("🤖 Bot Started...")
+
+    app.run_polling()
+
+
+if __name__ == "__main__":
+    main()
 
 
 
-app = Application.builder().token(TOKEN).build()
 
-app.add_handler(CommandHandler("start", start))
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search))
-
-print("🤖 Bot Started...")
-
-app.run_polling()
