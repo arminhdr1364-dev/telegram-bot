@@ -12,16 +12,12 @@ from keyboards import main_keyboard, coins_keyboard
 from binance_api import get_price
 
 
-# ==========================================
-# کاربران در حالت جستجوی ارز
-# ==========================================
-
 search_users = set()
 
 
-# ==========================================
+# ==================================================
 # ارزهای محبوب
-# ==========================================
+# ==================================================
 
 coins = {
     "🟠 BTC": "BTCUSDT",
@@ -35,9 +31,9 @@ coins = {
 }
 
 
-# ==========================================
+# ==================================================
 # START
-# ==========================================
+# ==================================================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
@@ -45,16 +41,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "👋 <b>به ربات قیمت ارزهای دیجیتال خوش آمدید.</b>\n\n"
         "💰 قیمت رمز ارز\n"
         "⭐ ارزهای محبوب\n"
-        "🎁 قیمت گیفت تلگرام\n\n"
-        "📊 اطلاعات از سرویس‌های مربوطه دریافت می‌شود.",
+        "🎁 قیمت گیفت تلگرام",
         parse_mode="HTML",
         reply_markup=main_keyboard()
     )
 
 
-# ==========================================
-# ارسال Giftهای Telegram
-# ==========================================
+# ==================================================
+# ارسال Giftها
+# ==================================================
 
 async def send_telegram_gifts(update: Update):
 
@@ -62,95 +57,140 @@ async def send_telegram_gifts(update: Update):
 
         bot = Bot(TOKEN)
 
-        # دریافت Giftها
         gifts = await bot.get_available_gifts()
 
         if not gifts.gifts:
 
             await update.message.reply_text(
-                "❌ در حال حاضر Giftای در دسترس نیست."
+                "❌ در حال حاضر Giftای موجود نیست."
             )
 
             return
 
-        # پیام اولیه
         await update.message.reply_text(
             "🎁 <b>Telegram Gifts</b>\n\n"
-            f"📦 تعداد Giftها: "
-            f"<b>{len(gifts.gifts)}</b>\n"
+            f"📦 تعداد: <b>{len(gifts.gifts)}</b>\n"
             "⭐ قیمت‌ها بر اساس Telegram Stars هستند.",
             parse_mode="HTML"
         )
 
-        # ارسال تک‌تک Giftها
         for number, gift in enumerate(
             gifts.gifts,
             start=1
         ):
 
+            # ==========================================
+            # اطلاعات Gift
+            # ==========================================
+
+            gift_id = gift.id
+            stars = gift.star_count
             sticker = gift.sticker
 
-            # --------------------------
-            # اگر Sticker وجود نداشت
-            # --------------------------
+            caption = (
+                f"🎁 <b>Gift #{number}</b>\n\n"
+                f"🆔 ID: <code>{gift_id}</code>\n"
+                f"⭐ قیمت: <b>{stars} Stars</b>"
+            )
+
+            # ==========================================
+            # اگر Sticker ندارد
+            # ==========================================
 
             if sticker is None:
 
                 await update.message.reply_text(
-                    f"🎁 <b>Gift #{number}</b>\n\n"
-                    f"🆔 ID: <code>{gift.id}</code>\n"
-                    f"⭐ قیمت: "
-                    f"<b>{gift.star_count}</b> Stars\n\n"
-                    "🖼 استیکر در دسترس نیست.",
+                    caption +
+                    "\n🖼 تصویر در دسترس نیست.",
                     parse_mode="HTML"
                 )
 
                 continue
 
-            # --------------------------
-            # اطلاعات Gift
-            # --------------------------
+            # ==========================================
+            # اطلاعات Sticker
+            # ==========================================
 
-            caption = (
-                f"🎁 <b>Gift #{number}</b>\n\n"
-                f"🆔 ID: <code>{gift.id}</code>\n"
-                f"⭐ قیمت: "
-                f"<b>{gift.star_count}</b> Stars"
+            file_id = sticker.file_id
+
+            is_animated = getattr(
+                sticker,
+                "is_animated",
+                False
             )
 
-            # --------------------------
+            is_video = getattr(
+                sticker,
+                "is_video",
+                False
+            )
+
+            # ==========================================
             # ارسال Sticker
-            # --------------------------
+            # ==========================================
+
+            sent = False
 
             try:
 
-                await update.message.reply_sticker(
-                    sticker=sticker.file_id
-                )
+                # استیکر معمولی
+                if not is_animated and not is_video:
 
-            except Exception as sticker_error:
+                    await update.message.reply_sticker(
+                        sticker=file_id
+                    )
+
+                    sent = True
+
+                # استیکر ویدیویی
+                elif is_video:
+
+                    await update.message.reply_video(
+                        video=file_id
+                    )
+
+                    sent = True
+
+                # استیکر متحرک
+                elif is_animated:
+
+                    await update.message.reply_animation(
+                        animation=file_id
+                    )
+
+                    sent = True
+
+            except Exception as e:
 
                 print(
-                    "Sticker Error:",
-                    repr(sticker_error)
+                    f"Gift {gift_id} send error:",
+                    repr(e)
                 )
+                # ==========================================
+            # اطلاعات Gift
+            # ==========================================
+
+            if sent:
 
                 await update.message.reply_text(
-                    "🖼 ارسال استیکر این Gift ممکن نبود."
+                    caption,
+                    parse_mode="HTML"
                 )
 
-            # --------------------------
-            # ارسال اطلاعات
-            # --------------------------
+            else:
 
-            await update.message.reply_text(
-                caption,
-                parse_mode="HTML"
-            )
+                await update.message.reply_text(
+                    caption +
+                    "\n🖼 ارسال تصویر این Gift ممکن نبود.",
+                    parse_mode="HTML"
+                )
 
+        # ==========================================
         # پایان
+        # ==========================================
+
         await update.message.reply_text(
-            "✅ <b>لیست Giftها به پایان رسید.</b>",
+            "✅ <b>نمایش Giftها تمام شد.</b>",
             parse_mode="HTML",
             reply_markup=main_keyboard()
         )
@@ -161,16 +201,17 @@ async def send_telegram_gifts(update: Update):
             "GIFT ERROR:",
             repr(e)
         )
+
         await update.message.reply_text(
-            "❌ خطا در دریافت Giftهای Telegram.\n\n"
-            "جزئیات خطا در Railway Logs ثبت شده است.",
+            "❌ خطا در دریافت Giftها.\n\n"
+            "لطفاً Railway Logs را بررسی کنید.",
             reply_markup=main_keyboard()
         )
 
 
-# ==========================================
-# نمایش قیمت ارز
-# ==========================================
+# ==================================================
+# قیمت ارز
+# ==================================================
 
 async def send_coin_price(
     update: Update,
@@ -184,8 +225,7 @@ async def send_coin_price(
         if data is None:
 
             await update.message.reply_text(
-                "❌ اطلاعات این ارز پیدا نشد.",
-                reply_markup=main_keyboard()
+                "❌ اطلاعات این ارز پیدا نشد."
             )
 
             return
@@ -200,16 +240,11 @@ async def send_coin_price(
 
         message = (
             f"💰 <b>{data['symbol']}</b>\n\n"
-            f"💵 قیمت: "
-            f"<b>{price:,.6f}</b> USDT\n\n"
-            f"📈 تغییرات: "
-            f"<b>{change:.2f}%</b>\n\n"
-            f"⬆️ بیشترین: "
-            f"{data['high']}\n\n"
-            f"⬇️ کمترین: "
-            f"{data['low']}\n\n"
-            f"📊 حجم معاملات: "
-            f"{data['volume']}"
+            f"💵 قیمت: <b>{price:,.6f}</b> USDT\n\n"
+            f"📈 تغییرات: <b>{change:.2f}%</b>\n\n"
+            f"⬆️ بیشترین: {data['high']}\n\n"
+            f"⬇️ کمترین: {data['low']}\n\n"
+            f"📊 حجم معاملات: {data['volume']}"
         )
 
         await update.message.reply_text(
@@ -226,14 +261,13 @@ async def send_coin_price(
         )
 
         await update.message.reply_text(
-            "❌ خطا در دریافت قیمت ارز.",
-            reply_markup=main_keyboard()
+            "❌ خطا در دریافت قیمت."
         )
 
 
-# ==========================================
+# ==================================================
 # مدیریت پیام‌ها
-# ==========================================
+# ==================================================
 
 async def search(
     update: Update,
@@ -244,13 +278,12 @@ async def search(
         return
 
     text = update.message.text.strip()
-
     user_id = update.effective_user.id
 
 
-    # ======================================
+    # ==================================================
     # بازگشت
-    # ======================================
+    # ==================================================
 
     if text == "🔙 بازگشت":
 
@@ -264,26 +297,25 @@ async def search(
         return
 
 
-    # ======================================
+    # ==================================================
     # ارزهای محبوب
-    # ======================================
+    # ==================================================
 
     if text == "⭐ ارزهای محبوب":
 
         search_users.discard(user_id)
 
         await update.message.reply_text(
-            "⭐ <b>یک ارز را انتخاب کنید:</b>",
-            parse_mode="HTML",
+            "⭐ یک ارز را انتخاب کنید:",
             reply_markup=coins_keyboard()
         )
 
         return
 
 
-    # ======================================
-    # انتخاب ارز محبوب
-    # ======================================
+    # ==================================================
+    # انتخاب ارز
+    # ==================================================
 
     if text in coins:
 
@@ -297,9 +329,9 @@ async def search(
         return
 
 
-    # ======================================
+    # ==================================================
     # قیمت رمز ارز
-    # ======================================
+    # ==================================================
 
     if text == "💰 قیمت رمز ارز":
 
@@ -307,21 +339,16 @@ async def search(
 
         await update.message.reply_text(
             "🔍 <b>نماد ارز را وارد کنید:</b>\n\n"
-            "مثال:\n"
             "BTC\n"
             "ETH\n"
-            "TON\n\n"
-            "یا:\n"
-            "BTCUSDT",
+            "TON",
             parse_mode="HTML"
         )
 
         return
-
-
-    # ======================================
+    # ==================================================
     # راهنما
-    # ======================================
+    # ==================================================
 
     if text == "ℹ️ راهنما":
 
@@ -330,12 +357,8 @@ async def search(
         await update.message.reply_text(
             "ℹ️ <b>راهنمای ربات</b>\n\n"
             "💰 قیمت رمز ارز\n"
-            "قیمت ارز موردنظر را دریافت کنید.\n\n"
             "⭐ ارزهای محبوب\n"
-            "قیمت ارزهای محبوب را مشاهده کنید.\n\n"
-            "🎁 قیمت گیفت تلگرام\n"
-            "Giftهای قابل ارسال Telegram و قیمت آنها "
-            "بر اساس Stars نمایش داده می‌شوند.",
+            "🎁 قیمت گیفت تلگرام",
             parse_mode="HTML",
             reply_markup=main_keyboard()
         )
@@ -343,52 +366,49 @@ async def search(
         return
 
 
-    # ======================================
-    # Telegram Gifts
-    # ======================================
+    # ==================================================
+    # Gift
+    # ==================================================
 
     if text == "🎁 قیمت گیفت تلگرام":
+
         search_users.discard(user_id)
 
-        await update.message.reply_text(
+        loading = await update.message.reply_text(
             "⏳ در حال دریافت Giftها از Telegram..."
         )
 
         await send_telegram_gifts(update)
 
+        try:
+            await loading.delete()
+        except Exception:
+            pass
+
         return
 
 
-    # ======================================
+    # ==================================================
     # پنل مدیریت
-    # ======================================
+    # ==================================================
 
     if text == "👤 پنل مدیریت":
 
-        search_users.discard(user_id)
-
         await update.message.reply_text(
-            "👤 <b>پنل مدیریت</b>\n\n"
-            "🚧 این بخش در نسخه بعدی اضافه می‌شود.",
-            parse_mode="HTML",
+            "🚧 پنل مدیریت به‌زودی اضافه می‌شود.",
             reply_markup=main_keyboard()
         )
 
         return
 
 
-    # ======================================
-    # اگر در حالت جستجو نیست
-    # ======================================
+    # ==================================================
+    # حالت جستجو
+    # ==================================================
 
     if user_id not in search_users:
-
         return
 
-
-    # ======================================
-    # جستجوی دستی ارز
-    # ======================================
 
     symbol = text.upper().replace(
         " ",
@@ -396,35 +416,21 @@ async def search(
     )
 
     if not symbol.endswith("USDT"):
-
         symbol += "USDT"
 
 
     data = get_price(symbol)
 
-
-    # ======================================
-    # ارز پیدا نشد
-    # ======================================
-
     if data is None:
 
         await update.message.reply_text(
-            "❌ ارز پیدا نشد.\n\n"
-            "مثلاً:\n"
-            "BTC\n"
-            "ETH\n"
-            "TON"
+            "❌ ارز پیدا نشد."
         )
 
         search_users.discard(user_id)
 
         return
 
-
-    # ======================================
-    # نمایش قیمت
-    # ======================================
 
     try:
 
@@ -438,16 +444,11 @@ async def search(
 
         message = (
             f"💰 <b>{data['symbol']}</b>\n\n"
-            f"💵 قیمت: "
-            f"<b>{price:,.6f}</b> USDT\n\n"
-            f"📈 تغییرات: "
-            f"<b>{change:.2f}%</b>\n\n"
-            f"⬆️ بیشترین: "
-            f"{data['high']}\n\n"
-            f"⬇️ کمترین: "
-            f"{data['low']}\n\n"
-            f"📊 حجم معاملات: "
-            f"{data['volume']}"
+            f"💵 قیمت: <b>{price:,.6f}</b> USDT\n\n"
+            f"📈 تغییرات: <b>{change:.2f}%</b>\n\n"
+            f"⬆️ بیشترین: {data['high']}\n\n"
+            f"⬇️ کمترین: {data['low']}\n\n"
+            f"📊 حجم معاملات: {data['volume']}"
         )
 
         await update.message.reply_text(
@@ -464,16 +465,15 @@ async def search(
         )
 
         await update.message.reply_text(
-            "❌ خطا در نمایش قیمت.",
-            reply_markup=main_keyboard()
+            "❌ خطا در نمایش قیمت."
         )
 
     search_users.discard(user_id)
 
 
-# ==========================================
+# ==================================================
 # اجرای ربات
-# ==========================================
+# ==================================================
 
 def main():
 
@@ -484,7 +484,6 @@ def main():
         .build()
     )
 
-    # دستور /start
     app.add_handler(
         CommandHandler(
             "start",
@@ -492,7 +491,6 @@ def main():
         )
     )
 
-    # پیام‌های متنی
     app.add_handler(
         MessageHandler(
             filters.TEXT & ~filters.COMMAND,
@@ -505,12 +503,14 @@ def main():
     app.run_polling()
 
 
-# ==========================================
-# Main
-# ==========================================
-
 if __name__ == "__main__":
     main()
+
+
+
+ 
+
+
 
 
 
