@@ -177,20 +177,35 @@ async def show_gifts(update: Update, context: ContextTypes.DEFAULT_TYPE):
             image_sent = False
 
             # اول خود Sticker
-            try:
+    
+
+            if sticker.is_animated:
+
+                await update.message.reply_animation(
+                    animation=sticker.file_id
+                )
+
+            elif sticker.is_video:
+
+                await update.message.reply_video(
+                    video=sticker.file_id
+                )
+
+            else:
 
                 await update.message.reply_sticker(
                     sticker=sticker.file_id
                 )
 
-                image_sent = True
+            image_sent = True
 
-            except Exception as error:
 
-                print(
-                    f"Gift {gift.id} sticker error:",
-                    repr(error)
-                )
+            print(
+                f"Gift {gift.id} sticker error:",
+                repr(error)
+    )
+
+                
 
             # اگر Sticker ارسال نشد، Thumbnail
             if not image_sent:
