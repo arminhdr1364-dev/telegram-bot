@@ -1,5 +1,4 @@
-
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -137,6 +136,14 @@ async def show_gifts(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"🆔 ID: <code>{gift.id}</code>\n"
                 f"⭐ قیمت: <b>{gift.star_count} Stars</b>"
             )
+            keyboard = InlineKeyboardMarkup([
+    [
+        InlineKeyboardButton(
+            "🛒 مشاهده / خرید در Portals",
+            url="https://t.me/portals"
+        )
+    ]
+])
 
             total_count = getattr(
                 gift,
@@ -246,7 +253,8 @@ async def show_gifts(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             await update.message.reply_text(
                 message,
-                parse_mode="HTML"
+                parse_mode="HTML",
+                reply_markup=keyboard
             )
 
         await update.message.reply_text(
