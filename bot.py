@@ -20,6 +20,8 @@ from binance_api import (
     get_top_volume,
     get_top_coins,
 )
+from binance_api import get_price, get_candles
+from chart import create_chart
 
 
 search_users = set()
@@ -779,7 +781,38 @@ async def search(
     # ==================================================
 # اجرای ربات
 # ==================================================
+async def send_chart(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
+    symbol = "BTC-USDT"
+
+    candles = get_candles(
+        symbol,
+        "1hour"
+    )
+
+    if not candles:
+        await update.message.reply_text(
+            "❌ دریافت اطلاعات نمودار ممکن نیست."
+        )
+        return
+
+    chart_file = create_chart(
+        candles,
+        symbol
+    )
+
+    if not chart_file:
+        await update.message.reply_text(
+            "❌ ساخت نمودار ناموفق بود."
+        )
+        return
+
+    with open(chart_file, "rb") as photo:
+
+        await update.message.reply_photo(
+            photo=photo,
+            caption=f"📈 نمودار {symbol}\n⏱ بازه: 1 ساعت"
+        )
 def main():
 
     app = (
