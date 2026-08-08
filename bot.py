@@ -1,3 +1,4 @@
+
 from telegram import Update
 from telegram.ext import (
     Application,
@@ -8,13 +9,19 @@ from telegram.ext import (
 )
 
 from config import TOKEN
-from keyboards import main_keyboard, coins_keyboard
-from binance_api import get_price
+from keyboards import (
+    main_keyboard,
+    coins_keyboard,
+    market_keyboard
+)
+from binance_api import (
+    get_price,
+    get_top_gainers,
+    get_top_losers,
+    get_top_volume,
+    get_top_coins,
+)
 
-
-# ==================================================
-# کاربران در حالت جستجوی ارز
-# ==================================================
 
 search_users = set()
 
@@ -36,18 +43,16 @@ coins = {
 
 
 # ==================================================
-# /start
+# START
 # ==================================================
 
-async def start(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
-):
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
         "👋 <b>به ربات قیمت ارزهای دیجیتال خوش آمدید.</b>\n\n"
         "💰 قیمت رمز ارز\n"
         "⭐ ارزهای محبوب\n"
+        "📊 بازار\n"
         "🎁 قیمت گیفت تلگرام\n"
         "ℹ️ راهنما",
         parse_mode="HTML",
@@ -56,275 +61,258 @@ async def start(
 
 
 # ==================================================
-# نمایش Giftهای Telegram
+# فرمت حجم
 # ==================================================
 
-async def show_gifts(
+def format_volume(value):
+
+    try:
+
+        value = float(value)
+
+        if value >= 1_000_000_000:
+            return f"{value / 1_000_000_000:.2f}B"
+
+        if value >= 1_000_000:
+            return f"{value / 1_000_000:.2f}M"
+
+        if value >= 1_000:
+            return f"{value / 1_000:.2f}K"
+
+        return f"{value:.2f}"
+
+    except Exception:
+
+        return str(value)
+
+
+# ==================================================
+# فرمت قیمت
+# ==================================================
+
+def format_price(price):
+
+    try:
+
+        price = float(price)
+
+        if price >= 1000:
+            return f"{price:,.2f}"
+
+        if price >= 1:
+            return f"{price:,.4f}"
+
+        return f"{price:,.8f}"
+
+    except Exception:
+
+        return str(price)
+
+
+# ==================================================
+# منوی بازار
+# ==================================================
+
+async def market_menu(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
 
-    try:
-
-        # دریافت Giftها از Telegram
-        gifts = await context.bot.get_available_gifts()
-
-        if not gifts.gifts:
-
-            await update.message.reply_text(
-                "❌ در حال حاضر Giftای موجود نیست.",
-                reply_markup=main_keyboard()
-            )
-
-            return
-
-        # پیام اولیه
-        await update.message.reply_text(
-            "🎁 <b>Telegram Gifts</b>\n\n"
-            f"📦 تعداد Giftها: <b>{len(gifts.gifts)}</b>\n"
-            "⭐ قیمت‌ها بر اساس Telegram Stars",
-            parse_mode="HTML"
-        )
-
-        # ==================================================
-        # نمایش تک تک Giftها
-        # ==================================================
-
-        for index, gift in enumerate(
-            gifts.gifts,
-            start=1
-        ):
-
-            sticker = gift.sticker
-
-            # ------------------------------------------
-            # اطلاعات اصلی
-            # ------------------------------------------
-
-            message = (
-                f"🎁 <b>Gift #{index}</b>\n\n"
-                f"🆔 ID: <code>{gift.id}</code>\n"
-                f"⭐ قیمت: <b>{gift.star_count} Stars</b>"
-            )
-
-            # ------------------------------------------
-            # تعداد کل
-            # ------------------------------------------
-
-            total_count = getattr(
-                gift,
-                "total_count",
-                None
-            )
-
-            if total_count is not None:
-
-                message += (
-                    f"\n📊 تعداد کل: "
-                    f"<b>{total_count}</b>"
-                )
-
-            # ------------------------------------------
-            # تعداد باقی مانده
-            # ------------------------------------------
-
-            remaining_count = getattr(
-                gift,
-                "remaining_count",
-                None
-            )
-
-            if remaining_count is not None:
-
-                message += (
-                    f"\n📦 باقی‌مانده: "
-                    f"<b>{remaining_count}</b>"
-                )
-
-            # ------------------------------------------
-            # هزینه ارتقا
-            # ------------------------------------------
-
-            upgrade_star_count = getattr(
-                gift,
-                "upgrade_star_count",
-                None
-            )
-
-            if upgrade_star_count is not None:
-
-                message += (
-                    f"\n⬆️ هزینه ارتقا: "
-                    f"<b>{upgrade_star_count} Stars</b>"
-                )
-                # ------------------------------------------
-            # Sticker موجود نیست
-            # ------------------------------------------
-
-            if sticker is None:
-
-                await update.message.reply_text(
-                    message +
-                    "\n\n🖼 تصویر: ❌ موجود نیست",
-                    parse_mode="HTML"
-                )
-
-                continue
-
-            # ------------------------------------------
-            # Emoji
-            # ------------------------------------------
-
-            emoji = getattr(
-                sticker,
-                "emoji",
-                None
-            )
-
-            if emoji:
-
-                message += (
-                    f"\n😀 Emoji: {emoji}"
-                )
-
-            # ------------------------------------------
-            # نوع Sticker
-            # ------------------------------------------
-
-            sticker_type = getattr(
-                sticker,
-                "type",
-                None
-            )
-
-            if sticker_type:
-
-                message += (
-                    f"\n🎞 نوع: "
-                    f"<code>{sticker_type}</code>"
-                )
-
-            # ==================================================
-            # روش اول: ارسال خود Sticker
-            # ==================================================
-
-            image_sent = False
-
-            try:
-
-                await update.message.reply_sticker(
-                    sticker=sticker.file_id
-                )
-
-                image_sent = True
-
-                message += (
-                    "\n🖼 نمایش: "
-                    "✅ Sticker"
-                )
-
-            except Exception as error:
-
-                print(
-                    f"[Gift {gift.id}] "
-                    f"Sticker Error: {repr(error)}"
-                )
-
-            # ==================================================
-            # روش دوم: ارسال Thumbnail
-            # ==================================================
-
-            if not image_sent:
-
-                thumbnail = getattr(
-                    sticker,
-                    "thumbnail",
-                    None
-                )
-
-                if thumbnail is not None:
-
-                    try:
-
-                        await update.message.reply_photo(
-                            photo=thumbnail.file_id
-                        )
-
-                        image_sent = True
-
-                        message += (
-                            "\n🖼 نمایش: "
-                            "✅ Thumbnail"
-                        )
-
-                    except Exception as error:
-
-                        print(
-                            f"[Gift {gift.id}] "
-                            f"Thumbnail Error: {repr(error)}"
-                        )
-
-            # ==================================================
-            # اگر هیچ تصویری ارسال نشد
-            # ==================================================
-
-            if not image_sent:
-
-                message += (
-                    "\n🖼 نمایش: "
-                    "❌ امکان ارسال تصویر وجود ندارد"
-                )
-
-            # ==================================================
-            # ارسال اطلاعات Gift
-            # ==================================================
-
-            try:
-
-                await update.message.reply_text(
-                    message,
-                    parse_mode="HTML"
-                )
-
-            except Exception as error:
-
-                print(
-                    f"[Gift {gift.id}] "
-                    f"Message Error: {repr(error)}"
-                )
-
-        # ==================================================
-        # پایان
-        # ==================================================
-
-        await update.message.reply_text(
-            "✅ <b>نمایش تمام Giftها تمام شد.</b>",
-            parse_mode="HTML",
-            reply_markup=main_keyboard()
-        )
-
-    except Exception as error:
-
-        print(
-            "========== GIFTS ERROR =========="
-        )
-        print(
-            repr(error)
-        )
-
-        print(
-            "================================"
-        )
-
-        await update.message.reply_text(
-            "❌ خطا در دریافت Giftهای Telegram.\n\n"
-            "جزئیات خطا در Railway Logs ثبت شده است.",
-            reply_markup=main_keyboard()
-        )
+    await update.message.reply_text(
+        "📊 <b>بازار ارزهای دیجیتال</b>\n\n"
+        "🔥 بیشترین رشد 24 ساعته\n"
+        "📉 بیشترین ریزش 24 ساعته\n"
+        "💰 بیشترین حجم معاملات\n"
+        "🏆 ارزهای برتر\n\n"
+        "یکی از گزینه‌ها را انتخاب کن.",
+        parse_mode="HTML",
+        reply_markup=market_keyboard()
+)
 
 
 # ==================================================
-# نمایش قیمت ارز
+# بیشترین رشد
+# ==================================================
+
+async def show_gainers(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+
+    await update.message.reply_text(
+        "⏳ در حال دریافت اطلاعات بازار..."
+    )
+
+    data = get_top_gainers(10)
+
+    if not data:
+
+        await update.message.reply_text(
+            "❌ اطلاعات بازار دریافت نشد."
+        )
+
+        return
+
+    text = (
+        "🔥 <b>بیشترین رشد 24 ساعته</b>\n\n"
+    )
+
+    for i, coin in enumerate(data, 1):
+
+        text += (
+            f"{i}. <b>{coin['symbol']}</b>\n"
+            f"💵 {format_price(coin['price'])} USDT\n"
+            f"📈 +{coin['change']:.2f}%\n"
+            f"📊 حجم: "
+            f"{format_volume(coin['volume'])}\n\n"
+        )
+
+    await update.message.reply_text(
+        text,
+        parse_mode="HTML"
+    )
+
+
+# ==================================================
+# بیشترین ریزش
+# ==================================================
+
+async def show_losers(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+
+    await update.message.reply_text(
+        "⏳ در حال دریافت اطلاعات بازار..."
+    )
+
+    data = get_top_losers(10)
+
+    if not data:
+
+        await update.message.reply_text(
+            "❌ اطلاعات بازار دریافت نشد."
+        )
+
+        return
+
+    text = (
+        "📉 <b>بیشترین ریزش 24 ساعته</b>\n\n"
+    )
+
+    for i, coin in enumerate(data, 1):
+        text += (
+            f"{i}. <b>{coin['symbol']}</b>\n"
+            f"💵 {format_price(coin['price'])} USDT\n"
+            f"📉 {coin['change']:.2f}%\n"
+            f"📊 حجم: "
+            f"{format_volume(coin['volume'])}\n\n"
+        )
+
+    await update.message.reply_text(
+        text,
+        parse_mode="HTML"
+    )
+
+
+# ==================================================
+# بیشترین حجم
+# ==================================================
+
+async def show_volume(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+
+    await update.message.reply_text(
+        "⏳ در حال دریافت اطلاعات بازار..."
+    )
+
+    data = get_top_volume(10)
+
+    if not data:
+
+        await update.message.reply_text(
+            "❌ اطلاعات بازار دریافت نشد."
+        )
+
+        return
+
+    text = (
+        "💰 <b>بیشترین حجم معاملات</b>\n\n"
+    )
+
+    for i, coin in enumerate(data, 1):
+
+        change = coin["change"]
+
+        sign = "+" if change >= 0 else ""
+
+        text += (
+            f"{i}. <b>{coin['symbol']}</b>\n"
+            f"💵 {format_price(coin['price'])} USDT\n"
+            f"📈 {sign}{change:.2f}%\n"
+            f"💰 حجم: "
+            f"{format_volume(coin['volume'])}\n\n"
+        )
+
+    await update.message.reply_text(
+        text,
+        parse_mode="HTML"
+    )
+
+
+# ==================================================
+# ارزهای برتر
+# ==================================================
+
+async def show_top_coins(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+
+    await update.message.reply_text(
+        "⏳ در حال دریافت اطلاعات بازار..."
+    )
+
+    data = get_top_coins(10)
+
+    if not data:
+
+        await update.message.reply_text(
+            "❌ اطلاعات بازار دریافت نشد."
+        )
+
+        return
+
+    text = (
+        "🏆 <b>10 ارز برتر بازار</b>\n\n"
+    )
+
+    for i, coin in enumerate(data, 1):
+
+        change = coin["change"]
+
+        sign = "+" if change >= 0 else ""
+
+        text += (
+            f"🏅 <b>{i}. {coin['symbol']}</b>\n"
+            f"💵 قیمت: "
+            f"{format_price(coin['price'])} USDT\n"
+            f"📈 تغییر: "
+            f"{sign}{change:.2f}%\n"
+            f"📊 حجم: "
+            f"{format_volume(coin['volume'])}\n\n"
+        )
+
+    await update.message.reply_text(
+        text,
+        parse_mode="HTML"
+    )
+
+
+# ==================================================
+# قیمت ارز
 # ==================================================
 
 async def send_coin_price(
@@ -339,36 +327,31 @@ async def send_coin_price(
         if data is None:
 
             await update.message.reply_text(
-                "❌ اطلاعات این ارز پیدا نشد.",
-                reply_markup=main_keyboard()
+                "❌ اطلاعات این ارز پیدا نشد."
             )
 
             return
 
-        price = float(
-            data["price"]
-        )
+        price = float(data["price"])
 
-        change = float(
-            data["change"]
-        ) * 100
+        change = float(data["change"]) * 100
 
-        message = (
+        sign = "+" if change >= 0 else ""
+
+        text = (
             f"💰 <b>{data['symbol']}</b>\n\n"
             f"💵 قیمت: "
-            f"<b>{price:,.6f}</b> USDT\n\n"
+            f"<b>{format_price(price)}</b> USDT\n\n"
             f"📈 تغییرات: "
-            f"<b>{change:.2f}%</b>\n\n"
-            f"⬆️ بیشترین: "
-            f"{data['high']}\n\n"
-            f"⬇️ کمترین: "
-            f"{data['low']}\n\n"
+            f"<b>{sign}{change:.2f}%</b>\n\n"
+            f"⬆️ بیشترین: {data['high']}\n\n"
+            f"⬇️ کمترین: {data['low']}\n\n"
             f"📊 حجم معاملات: "
             f"{data['volume']}"
         )
 
         await update.message.reply_text(
-            message,
+            text,
             parse_mode="HTML",
             reply_markup=coins_keyboard()
         )
@@ -381,13 +364,12 @@ async def send_coin_price(
         )
 
         await update.message.reply_text(
-            "❌ خطا در دریافت قیمت.",
-            reply_markup=main_keyboard()
+            "❌ خطا در دریافت قیمت."
         )
 
 
 # ==================================================
-# مدیریت پیام‌های متنی
+# مدیریت پیام‌ها
 # ==================================================
 
 async def search(
@@ -410,10 +392,81 @@ async def search(
     if text == "🔙 بازگشت":
 
         search_users.discard(user_id)
-
         await update.message.reply_text(
             "🏠 به منوی اصلی برگشتید.",
             reply_markup=main_keyboard()
+        )
+
+        return
+
+
+    # ==================================================
+    # بازار
+    # ==================================================
+
+    if text in (
+        "📊 بازار",
+        "📈 بازار",
+        "💹 بازار"
+    ):
+
+        search_users.discard(user_id)
+
+        await market_menu(
+            update,
+            context
+        )
+
+        return
+
+
+    # ==================================================
+    # گزینه‌های بازار
+    # ==================================================
+
+    if text == "🔥 بیشترین رشد":
+
+        await show_gainers(
+            update,
+            context
+        )
+
+        return
+
+
+    if text == "📉 بیشترین ریزش":
+
+        await show_losers(
+            update,
+            context
+        )
+
+        return
+
+
+    if text == "💰 بیشترین حجم":
+
+        await show_volume(
+            update,
+            context
+        )
+
+        return
+
+
+    if text == "🏆 ارزهای برتر":
+
+        await show_top_coins(
+            update,
+            context
+        )
+
+        return
+    if text == "🔄 بروزرسانی بازار":
+
+        await market_menu(
+            update,
+            context
         )
 
         return
@@ -462,12 +515,10 @@ async def search(
 
         await update.message.reply_text(
             "🔍 <b>نماد ارز را وارد کنید:</b>\n\n"
-            "مثال:\n"
             "BTC\n"
             "ETH\n"
             "TON\n\n"
-            "یا:\n"
-            "BTCUSDT",
+            "یا BTCUSDT",
             parse_mode="HTML"
         )
 
@@ -482,23 +533,13 @@ async def search(
 
         search_users.discard(user_id)
 
-        loading = await update.message.reply_text(
-            "⏳ در حال دریافت Giftهای Telegram..."
+        await update.message.reply_text(
+            "🎁 بخش Gift را از نسخه فعلی رباتت استفاده کن."
         )
-
-        await show_gifts(
-            update,
-            context
-        )
-
-        try:
-
-            await loading.delete()
-
-        except Exception:
-            pass
 
         return
+
+
     # ==================================================
     # راهنما
     # ==================================================
@@ -510,11 +551,9 @@ async def search(
         await update.message.reply_text(
             "ℹ️ <b>راهنمای ربات</b>\n\n"
             "💰 قیمت رمز ارز\n"
-            "قیمت ارز موردنظر را دریافت کنید.\n\n"
             "⭐ ارزهای محبوب\n"
-            "قیمت ارزهای محبوب را ببینید.\n\n"
-            "🎁 قیمت گیفت تلگرام\n"
-            "Giftهای موجود Telegram و قیمت Stars آنها.",
+            "📊 بازار\n"
+            "🎁 قیمت گیفت تلگرام",
             parse_mode="HTML",
             reply_markup=main_keyboard()
         )
@@ -528,12 +567,8 @@ async def search(
 
     if text == "👤 پنل مدیریت":
 
-        search_users.discard(user_id)
-
         await update.message.reply_text(
-            "👤 <b>پنل مدیریت</b>\n\n"
-            "🚧 این بخش در نسخه بعدی اضافه می‌شود.",
-            parse_mode="HTML",
+            "🚧 پنل مدیریت در نسخه بعدی اضافه می‌شود.",
             reply_markup=main_keyboard()
         )
 
@@ -541,17 +576,12 @@ async def search(
 
 
     # ==================================================
-    # اگر در حالت جستجو نیست
+    # حالت جستجوی ارز
     # ==================================================
 
     if user_id not in search_users:
-
         return
 
-
-    # ==================================================
-    # جستجوی دستی
-    # ==================================================
 
     symbol = text.upper().replace(
         " ",
@@ -559,7 +589,6 @@ async def search(
     )
 
     if not symbol.endswith("USDT"):
-
         symbol += "USDT"
 
 
@@ -568,9 +597,7 @@ async def search(
     if data is None:
 
         await update.message.reply_text(
-            "❌ ارز پیدا نشد.\n\n"
-            "مثلاً BTC یا ETH را امتحان کنید.",
-            reply_markup=main_keyboard()
+            "❌ ارز پیدا نشد."
         )
 
         search_users.discard(user_id)
@@ -578,52 +605,13 @@ async def search(
         return
 
 
-    try:
-
-        price = float(
-            data["price"]
-        )
-
-        change = float(
-            data["change"]
-        ) * 100
-
-        message = (
-            f"💰 <b>{data['symbol']}</b>\n\n"
-            f"💵 قیمت: "
-            f"<b>{price:,.6f}</b> USDT\n\n"
-            f"📈 تغییرات: "
-            f"<b>{change:.2f}%</b>\n\n"
-            f"⬆️ بیشترین: "
-            f"{data['high']}\n\n"
-            f"⬇️ کمترین: "
-            f"{data['low']}\n\n"
-            f"📊 حجم معاملات: "
-            f"{data['volume']}"
-        )
-
-        await update.message.reply_text(
-            message,
-            parse_mode="HTML",
-            reply_markup=main_keyboard()
-        )
-
-    except Exception as error:
-
-        print(
-            "SEARCH ERROR:",
-            repr(error)
-        )
-
-        await update.message.reply_text(
-            "❌ خطا در نمایش قیمت.",
-            reply_markup=main_keyboard()
-        )
+    await send_coin_price(
+        update,
+        symbol
+    )
 
     search_users.discard(user_id)
-
-
-# ==================================================
+    # ==================================================
 # اجرای ربات
 # ==================================================
 
@@ -636,7 +624,6 @@ def main():
         .build()
     )
 
-    # /start
     app.add_handler(
         CommandHandler(
             "start",
@@ -644,7 +631,6 @@ def main():
         )
     )
 
-    # پیام‌های متنی
     app.add_handler(
         MessageHandler(
             filters.TEXT & ~filters.COMMAND,
@@ -657,9 +643,7 @@ def main():
     app.run_polling()
 
 
-# ==================================================
-# اجرای اصلی
-# ==================================================
-
 if __name__ == "__main__":
     main()
+
+
