@@ -110,170 +110,46 @@ async def show_gifts(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
 
-        gifts = await context.bot.get_available_gifts()
+        result = await context.bot.get_available_gifts()
 
-        if not gifts.gifts:
+        print("========== GIFTS ==========")
+        print(result)
+        print("============================")
+
+        if not result.gifts:
 
             await update.message.reply_text(
-                "❌ در حال حاضر Giftای موجود نیست."
+                "❌ Telegram هیچ Giftای برنگرداند."
             )
 
             return
 
         await update.message.reply_text(
-            "🎁 <b>Telegram Gifts</b>\n\n"
-            f"📦 تعداد Giftها: <b>{len(gifts.gifts)}</b>\n"
-            "⭐ قیمت‌ها بر اساس Telegram Stars",
-            parse_mode="HTML"
+            f"🎁 تعداد Giftهای دریافت‌شده: {len(result.gifts)}"
         )
 
-        for index, gift in enumerate(gifts.gifts, start=1):
+        for index, gift in enumerate(result.gifts, start=1):
 
-            sticker = gift.sticker
-
-            message = (
+            text = (
                 f"🎁 <b>Gift #{index}</b>\n\n"
                 f"🆔 ID: <code>{gift.id}</code>\n"
                 f"⭐ قیمت: <b>{gift.star_count} Stars</b>"
             )
-            keyboard = InlineKeyboardMarkup([
-    [
-        InlineKeyboardButton(
-            "🛒 مشاهده / خرید در Portals",
-            url="https://t.me/portals"
-        )
-    ]
-])
-
-            total_count = getattr(
-                gift,
-                "total_count",
-                None
-            )
-
-            remaining_count = getattr(
-                gift,
-                "remaining_count",
-                None
-            )
-
-            if total_count is not None:
-
-                message += (
-                    f"\n📊 تعداد کل: "
-                    f"<b>{total_count}</b>"
-                )
-
-            if remaining_count is not None:
-
-                message += (
-                    f"\n📦 باقی‌مانده: "
-                    f"<b>{remaining_count}</b>"
-                )
-
-            if sticker is None:
-
-                await update.message.reply_text(
-                    message +
-                    "\n🖼 تصویر: ❌ موجود نیست",
-                    parse_mode="HTML"
-                )
-
-                continue
-
-            image_sent = False
-
-            # اول خود Sticker
-    
-
-            if sticker.is_animated:
-
-                await update.message.reply_animation(
-                    animation=sticker.file_id
-                )
-
-            elif sticker.is_video:
-
-                await update.message.reply_video(
-                    video=sticker.file_id
-                )
-
-            else:
-
-                await update.message.reply_sticker(
-                    sticker=sticker.file_id
-                )
-
-            image_sent = True
-
-
-            print(
-                f"Gift {gift.id} sticker error:",
-                repr(error)
-    )
-
-                
-
-            # اگر Sticker ارسال نشد، Thumbnail
-            if not image_sent:
-
-                thumbnail = getattr(
-                    sticker,
-                    "thumbnail",
-                    None
-                )
-
-                if thumbnail is not None:
-
-                    try:
-
-                        await update.message.reply_photo(
-                            photo=thumbnail.file_id
-                        )
-
-                        image_sent = True
-
-                    except Exception as error:
-
-                        print(
-                            f"Gift {gift.id} thumbnail error:",
-                            repr(error)
-                        )
-
-            if image_sent:
-
-                message += "\n🖼 تصویر: ✅"
-
-            else:
-
-                message += (
-                    "\n🖼 تصویر: "
-                    "❌ ارسال نشد"
-                )
 
             await update.message.reply_text(
-                message,
-                parse_mode="HTML",
-                reply_markup=keyboard
+                text,
+                parse_mode="HTML"
             )
-
-        await update.message.reply_text(
-            "✅ نمایش Giftها تمام شد.",
-            reply_markup=main_keyboard()
-        )
 
     except Exception as error:
 
-        print(
-            "GIFTS ERROR:",
-            repr(error)
-        )
+        print("========== GIFTS ERROR ==========")
+        print(repr(error))
+        print("=================================")
 
         await update.message.reply_text(
-            "❌ خطا در دریافت Giftهای Telegram.",
-            reply_markup=main_keyboard()
+            "❌ دریافت Gift با خطا مواجه شد."
         )
-
 
 # ==================================================
 # منوی بازار
